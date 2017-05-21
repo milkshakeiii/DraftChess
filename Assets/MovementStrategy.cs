@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 
+//this struct represents a possible movement of a piece
 public struct Move
 {
 	public int FromX;
@@ -29,13 +30,7 @@ public struct Move
 public abstract class MovementStrategy  
 {
 
-
-
-	public MovementStrategy()
-	{
-
-	}
-
+    //simply searches through the list of moves- not fast
 	public virtual bool MoveAvailable(Piece mover, Move move)
 	{
 		ArrayList availableMoves = AvailableMoves (mover);
@@ -49,23 +44,14 @@ public abstract class MovementStrategy
 		return false;
 	}
 
+    //based on who is moving, movement strategies determine what moves are available
 	public abstract ArrayList AvailableMoves (Piece mover);
-
-	public void RemoveOutOfBounds(ref ArrayList moves)
-	{
-		foreach (Move move in moves)
-		{
-			if (move.ToX < 0 || move.ToZ < 0 || move.ToX >= Board.CurrentBoard.Width || move.ToZ >= Board.CurrentBoard.Height)
-				moves.Remove(move);
-		}
-	}
-
-
 }
 
 public class PawnMovementStrategy : MovementStrategy
 {
 
+    //the logic of a pawn move in chess
 	public override ArrayList AvailableMoves(Piece mover)
 	{
 		int allowedRange;
@@ -82,7 +68,10 @@ public class PawnMovementStrategy : MovementStrategy
 
 		for (int i = 0; i < allowedRange; i++)
 		{
-			Move potentialMove = new Move(mover.GetX(), mover.GetZ(), mover.GetX(), mover.GetZ() + directionalNegater * (i + 1));
+			Move potentialMove = new Move(mover.GetX(), 
+                                          mover.GetZ(),
+                                          mover.GetX(),
+                                          mover.GetZ() + directionalNegater * (i + 1));
 			if (Board.CurrentBoard.SquareOccupied(potentialMove.ToX, potentialMove.ToZ) 
 			    || !Board.CurrentBoard.InBounds(potentialMove.ToX, potentialMove.ToZ))
 				break;
@@ -94,12 +83,11 @@ public class PawnMovementStrategy : MovementStrategy
 		int leftDiagonalX = mover.GetX () - 1;
 		int diagonalZ = mover.GetZ () + directionalNegater;
 
-		Debug.Log ("mover is mine: " + mover.IsMine ().ToString());
-		if ( CaptureAvailableAt(rightDiagonalX, diagonalZ, mover) )
+		if ( Board.CurrentBoard.CaptureAvailableAt(rightDiagonalX, diagonalZ, mover) )
 		{
 			availableMoves.Add(new Move(mover.GetX(), mover.GetZ(), rightDiagonalX, diagonalZ));
 		}
-		if ( CaptureAvailableAt(leftDiagonalX, diagonalZ, mover))
+		if (Board.CurrentBoard.CaptureAvailableAt(leftDiagonalX, diagonalZ, mover))
 		{
 			availableMoves.Add(new Move(mover.GetX(), mover.GetZ(), leftDiagonalX, diagonalZ));
 		}
@@ -107,15 +95,35 @@ public class PawnMovementStrategy : MovementStrategy
 		return availableMoves;
 	}
 
-	private bool CaptureAvailableAt(int x, int z, Piece mover)
-	{
-		if (!(Board.CurrentBoard.InBounds(x, z) && Board.CurrentBoard.SquareOccupied(x, z)))
-		{
-			return false;
-		}
-		bool differentOwners = !Board.CurrentBoard.GetPieceAt(x, z).IsMine ();
-		Debug.Log ("different owners: " + differentOwners.ToString ());
-		return differentOwners;
-	}
+}
 
+public class KnightMovementStrategy : MovementStrategy
+{
+
+    //just like a knight in western chess
+    public override ArrayList AvailableMoves(Piece mover)
+    {
+        ArrayList availableMoves = new ArrayList();
+
+        foreach (int smallerHopPart in new int[] { 1, -1 })
+        {
+            foreach (int biggerHopPart in new int[] { 2, -2 })
+            {
+                Move wideHop = new Move(mover.GetX(),
+                                        mover.GetZ(),
+                                        mover.GetX() + smallerHopPart,
+                                        mover.GetZ() + biggerHopPart);
+                Move tallHop = new Move(mover.GetX(),
+                                        mover.GetZ(),
+                                        mover.GetX() + biggerHopPart,
+                                        mover.GetZ() + smallerHopPart);
+                if (Board.CurrentBoard.InBounds(wideHop.ToX, wideHop.ToZ))
+                    availableMoves.Add(wideHop);
+                if (Board.CurrentBoard.InBounds(tallHop.ToX, tallHop.ToZ))
+                    availableMoves.Add(tallHop);
+            }
+        }
+
+        return availableMoves;
+    }
 }

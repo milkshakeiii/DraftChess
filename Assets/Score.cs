@@ -1,11 +1,13 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-public class Score : MonoBehaviour {
-
+public class Score : MonoBehaviour
+{
 	public delegate void ScoreIncreasedAction(int amountIncrease);
 	public static event ScoreIncreasedAction ScoreIncreased;
+    //invoke this event to modify player scores
 
+    //only one score display per scene
 	public static Score currentScore;
 
 	private int score = 0;
@@ -30,13 +32,14 @@ public class Score : MonoBehaviour {
 		score += amountIncrease;
 	}
 
-	// Use this for initialization
-	void Start () {
+	void Start ()
+    {
 		currentScore = this;
 	}
 	
 	// Update is called once per frame
-	void Update () {
-		guiText.text = "Your Score: " + score.ToString ();
+	void Update ()
+    {
+		GetComponent<GUIText>().text = "Your Score: " + score.ToString ();
 	}
 }

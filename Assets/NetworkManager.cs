@@ -1,15 +1,13 @@
 using UnityEngine;
 using System.Collections;
 
-public class NetworkManager : MonoBehaviour {
-
+public class NetworkManager : MonoBehaviour
+{
+    //each client holds one network manager (a singleton) which facilitates network communication
 	public static NetworkManager CurrentManager;
 
-	public delegate void NextTurnAction();
-	public static event NextTurnAction NextTurn;
-
-	private const string typeName = "JunGameName";
-	private const string gameName = "JunRoomName";
+	private const string typeName = "DraftChessTestGameName";
+	private const string gameName = "DraftChessTestRoomName";
 	private HostData[] hostList;
 
 	private int numberOfPlayers = 0;
@@ -35,6 +33,7 @@ public class NetworkManager : MonoBehaviour {
 		Network.Connect(hostData);
 	}
 
+    //in the current architecture, a dedicated server tracks players as they join
 	[RPC]
 	public void NewPlayerJoined(NetworkMessageInfo info)
 	{
@@ -49,18 +48,16 @@ public class NetworkManager : MonoBehaviour {
 
 	}
 
-	public void BeginGame()
+	private void BeginGame()
 	{
 		SetActivePlayer (1);
 		for (int i = 0; i < maxPlayers; i++)
-			networkView.RPC ("setupPlayer", players[i], i+1);
+			GetComponent<NetworkView>().RPC ("SetUpPlayer", players[i], i+1);
 	}
 
 	[RPC]
-	public void setupPlayer(int playerNumber)
+	public void SetUpPlayer(int playerNumber)
 	{
-		Debug.Log("setup myself, player number " + playerNumber);
-		PieceFactory.BuildPlayerArmy (playerNumber);
 		myPlayerNumber = playerNumber;
 		numberOfPlayers = maxPlayers;
 		SetActivePlayer (1);
@@ -68,15 +65,15 @@ public class NetworkManager : MonoBehaviour {
 
 	public bool IsMyTurn()
 	{
-		//print ("I'm number " + myPlayerNumber + ".  Active is " + currentlyActivePlayerNumber);
-		return (myPlayerNumber == currentlyActivePlayerNumber);
+		return (numberOfPlayers == maxPlayers && myPlayerNumber == currentlyActivePlayerNumber);
 	}
 
-	public void PassMyTurn()
+    //have the server communicate your turn's completion
+	public void MoveComplete(Move move)
 	{
 		IncrementLocalActivePlayer();
 		Debug.Log ("My Turn Over.  Currently Active: " + currentlyActivePlayerNumber);
-		networkView.RPC ("PlayerTurnOver", RPCMode.Server);
+		GetComponent<NetworkView>().RPC ("PlayerMoveComplete", RPCMode.Server, move.FromX, move.FromZ, move.ToX, move.ToZ);
 	}
 
 	private void IncrementLocalActivePlayer()
@@ -92,27 +89,29 @@ public class NetworkManager : MonoBehaviour {
 	}
 
 	[RPC]
-	public void PlayerTurnOver()
+	public void PlayerMoveComplete(int moveFromX, int moveFromZ, int moveToX, int moveToZ)
 	{
 		IncrementLocalActivePlayer();
 		Debug.Log ("Player Turn Over.  Currently Active: " + currentlyActivePlayerNumber);
 		for (int i = 0; i < maxPlayers; i++)
 		{
-			networkView.RPC ("SetActivePlayer", players[i], currentlyActivePlayerNumber);
-			networkView.RPC ("NextTurnEvent", players[i]);
-		}
+			GetComponent<NetworkView>().RPC ("SetActivePlayer", players[i], currentlyActivePlayerNumber);
+            GetComponent<NetworkView>().RPC ("RelayPieceMovedEvent", players[i], moveFromX, moveFromZ, moveToX, moveToZ);
+            //pieces are moved when the server relays the move to everyone (including the mover)
+        }
 	}
 
 	[RPC]
-	public void NextTurnEvent()
+	public void RelayPieceMovedEvent(int fromX, int fromZ, int toX, int toZ)
 	{
-		NextTurn ();
+        Debug.Log("Received another player's move");
+        Piece.AnnouncePieceMoved(new Move(fromX, fromZ, toX, toZ));
 	}
 
 	void OnConnectedToServer()
 	{
 		Debug.Log("Joined");
-		networkView.RPC ("NewPlayerJoined", RPCMode.Server);
+		GetComponent<NetworkView>().RPC ("NewPlayerJoined", RPCMode.Server);
 	}
 
 	private void StartServer()
@@ -126,6 +125,7 @@ public class NetworkManager : MonoBehaviour {
 		Debug.Log("Server Initializied");
 	}
 
+    //test buttons for hosting and joining
 	void OnGUI()
 	{
 		if (!Network.isClient && !Network.isServer)
@@ -147,35 +147,10 @@ public class NetworkManager : MonoBehaviour {
 		}
 	}
 
-	// Use this for initialization
-	void Start () {
+	void Start ()
+    {
 		players = new NetworkPlayer[maxPlayers];
 		CurrentManager = this;
-	}
-	
-	// Update is called once per frame
-	void Update () {
-	
-	}
-	
-	public static bool PlayerIsNorthFacing(int playerNumber)
-	{
-		return (playerNumber % 2 == 1);
-	}
-
-	public NetworkPlayer Owner()
-	{
-		return players[myPlayerNumber - 1];
-	}
-
-	public NetworkPlayer PlayerNumbered(int playerNumber)
-	{
-		return players[playerNumber - 1];
-	}
-
-	public int PlayerNumberOf(NetworkPlayer player)
-	{
-		return System.Array.IndexOf<NetworkPlayer> (players, player);
 	}
 
 	public int MyPlayerNumber()

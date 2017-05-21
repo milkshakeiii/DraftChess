@@ -1,55 +1,34 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-public class Board : MonoBehaviour {
-
+public class Board : MonoBehaviour
+{
+    //there is only one board in a scene, like a singleton
 	public static Board CurrentBoard;
 
-	public float Spacing = 1f;
-	[Range(0, 1)]
-	public float Holeyness = 0.25f;
+	public float Spacing = 1f; //space between tiles
 	public int Width = 32;
 	public int Height = 32;
 	public GameObject TilePrefab;
 	public GameObject PiecePrefab;
 	public GameObject ControlPointPrefab;
 
-	private Tile[,] board;
-	private ArrayList boardObservers = new ArrayList();
+    [Range(0, 1)]
+    public float Holeyness = 0.25f; //percent chance to omit a tile, with editor slider
 
-	public Tile[,] GetBoard()
-	{
-		return board;
-	}
+    private Tile[,] board; //the board is implemented as a 2D array of tiles
 
-	public void SetBoard(Tile[,] newBoard)
-	{
-		board = newBoard;
-	}
-
-	public void AddObserver(BoardObserver newObserver)
-	{
-		boardObservers.Add (newObserver);
-	}
-
-	private void BoardChangedNotifyObservers()
-	{
-		//print ("notifying " + boardObservers.Count + " observers");
-		foreach(BoardObserver observer in boardObservers)
-		{
-			observer.BoardChangedNotification();
-		}
-	}
-
-	// Use this for initialization
-	void Start () {
+	
+	void Start ()
+    {
 		SetupBoard();
 		CurrentBoard = this;
 	}
 
 	void OnEnable ()
 	{
-		Piece.PieceMoved += OnPieceMove;
+        //the board subscribes to piecemoved events so that it can update its tiles
+        Piece.PieceMoved += OnPieceMove; 
 	}
 	
 	void OnDisable()
@@ -57,37 +36,51 @@ public class Board : MonoBehaviour {
 		Piece.PieceMoved -= OnPieceMove;
 	}
 
-	void OnPieceMove(Piece piece, Move move)
+	private void OnPieceMove(Move move)
 	{
-		RemovePieceAt (move.FromX, move.FromZ);
-		if (SquareOccupied(move.ToX, move.ToZ))
+        Debug.Log(move.FromX);
+        Debug.Log(move.FromZ);
+        Piece piece = GetPieceAt(move.FromX, move.FromZ);
+        RemovePieceAt (move.FromX, move.FromZ);
+        Debug.Log(piece);
+        piece.SetPosition(move.ToX, move.ToZ);
+        if (SquareOccupied(move.ToX, move.ToZ))
 		{
 			Piece capturedPiece = GetPieceAt(move.ToX, move.ToZ);
 			capturedPiece.WasCaptured();
 		}
 		SetPieceAt (move.ToX, move.ToZ, piece);
 
-		BoardChangedNotifyObservers ();
 	}
 
-	public Vector3 PositionOf(int x, int z)
+	private Vector3 PositionOf(int x, int z)
 	{
 		return board[x, z].gameObject.transform.position;
 	}
 
-	public Tile TileAtPosition(int x, int z)
-	{
-		return board [x, z];
-	}
-
-	public void SetupBoard()
+    //build a board with a control point and some pieces to test with
+	private void SetupBoard()
 	{
 		board = new Tile[Width, Height];
 		GenerateHoleyBoard ();
-		AddControlPoint (4, 12, 1);
-	}
+		AddControlPoint (4, 4, 1);
+        AddPiece(4, 1, new PawnMovementStrategy(), 1);
+        AddPiece(4, 6, new PawnMovementStrategy(), 2);
+        AddPiece(4, 0, new KnightMovementStrategy(), 1);
+        AddPiece(4, 7, new KnightMovementStrategy(), 2);
+    }
 
-	public void AddControlPoint(int x, int z, int size)
+    private void AddPiece(int x, int z, MovementStrategy movementStrategy, int owner)
+    {
+        Piece newPiece = Instantiate(PiecePrefab).GetComponent<Piece>();
+        newPiece.SetX(x);
+        newPiece.SetZ(z);
+        newPiece.SetMovementStrategy(movementStrategy);
+        newPiece.SetOwner(owner);
+        SetPieceAt(x, z, newPiece);
+    }
+
+	private void AddControlPoint(int x, int z, int size)
 	{
 		Vector3 position = PositionOf (x, z) + new Vector3 (0, 0.05f, 0);
 		GameObject controlPoint = Instantiate (ControlPointPrefab, position, new Quaternion ()) as GameObject;
@@ -98,7 +91,7 @@ public class Board : MonoBehaviour {
 		controlPointScript.SetSize(size);
 	}
 
-	void GenerateHoleyBoard()
+	private void GenerateHoleyBoard()
 	{
 		float bottom = 0;
 		float left = 0;
@@ -118,11 +111,9 @@ public class Board : MonoBehaviour {
 				}
 			}
 		}
-		print ("finished generating");
-		print (board [0, 0]);
 	}
 
-	public void SetPieceAt(int x, int z, Piece piece)
+	private void SetPieceAt(int x, int z, Piece piece)
 	{
 		board [x, z].SetOccupant (piece);
 	}
@@ -134,12 +125,16 @@ public class Board : MonoBehaviour {
 
 	public bool SquareOccupied(int x, int z)
 	{
-		if (x < 0 || z < 0 || x > Width || z > Height)
-			return true;
-		return GetPieceAt (x, z) != null;
+		return !InBounds(x, z) || GetPieceAt (x, z) != null;
 	}
 
-	public Piece GetPieceAt(int x, int z)
+    public bool CaptureAvailableAt(int x, int z, Piece mover)
+    {
+        return InBounds(x, z) && SquareOccupied(x, z) && !GetPieceAt(x, z).IsMine();
+    }
+
+    
+    public Piece GetPieceAt(int x, int z)
 	{
 		return board [x, z].GetOccupant();
 	}

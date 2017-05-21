@@ -1,19 +1,17 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-public class Tile : MonoBehaviour {
-
+public class Tile : MonoBehaviour
+{
 	public delegate void TileClickedAction(int tileX, int tileZ);
 	public static event TileClickedAction TileClicked;
+    //invoke this when a player clicks a tile so that pieces, etc. can respond
+    //to the player's commands
 		
-	private Piece occupant;
+	private Piece occupant; //this is the piece sitting on this tile on the board
 	private int x;
 	private int z;
 
-	// Use this for initialization
-	void Start () {
-	
-	}
 
 	public static void ClickTile (int clickX, int clickZ)
 	{
@@ -35,14 +33,10 @@ public class Tile : MonoBehaviour {
 		return occupant;
 	}
 
-
-	// Update is called once per frame
-	void Update () {
-	
-	}
-
 	void OnMouseDown()
 	{
+        Debug.Log(x);
+        Debug.Log(z);
 		ClickTile (x, z);
 	}
 
@@ -55,31 +49,4 @@ public class Tile : MonoBehaviour {
 	{
 		z = newZ;
 	}
-
-	public int GetX()
-	{
-		return x;
-	}
-
-	public int GetZ()
-	{
-		return z;
-	}
-
-	void OnSerializeNetworkView(BitStream stream, NetworkMessageInfo info) {
-		int serialX = 0;
-		int serialZ = 0;
-		if (stream.isWriting) {
-			serialX = GetX ();
-			serialZ = GetZ ();
-			stream.Serialize(ref serialX);
-			stream.Serialize(ref serialZ);
-		} else {
-			stream.Serialize(ref serialX);
-			stream.Serialize(ref serialZ);
-			SetX(serialX);
-			SetZ(serialZ);
-		}
-	}
-
 }

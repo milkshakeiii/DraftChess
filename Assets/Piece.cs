@@ -1,52 +1,31 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-public class Piece : MonoBehaviour {
-
-	public delegate void PieceMovedAction(Piece piece, Move move);
+public class Piece : MonoBehaviour
+{
+	public delegate void PieceMovedAction(Move move);
 	public static event PieceMovedAction PieceMoved;
+    //invoke this event when the player has successfully executed a legal move
 
 	public float Spacing = 1f;
+    public GameObject highlightPrefab; //used to show squares a piece can move to
 
 	private int owningPlayerNumber;
 	private bool selected = false;
 	private int positionX = 0;
 	private int positionZ = 0;
-	private MovementStrategy myMovementStrategy;
-	private bool everMoved = false;
+	private MovementStrategy myMovementStrategy; //strategy used to determine legal moves
+	private bool everMoved = false; //whether or not this piece has moved once (relevant for pawns)
 	private ArrayList moveHistory = new ArrayList();
 
 	private ArrayList availableMoveMarkers = new ArrayList();
 
-	// Use this for initialization
-	void Start ()
-	{
+    public static void AnnouncePieceMoved(Move move)
+    {
+        PieceMoved(move);
+    }
 
-	}
-
-	void OnSerializeNetworkView(BitStream stream, NetworkMessageInfo info) 
-	{
-		int serialX = 0 ;
-		int serialZ = 0 ;
-		if (stream.isWriting) 
-		{
-			serialX = GetX ();
-			serialZ = GetZ ();
-			stream.Serialize(ref serialX);
-			stream.Serialize(ref serialZ);
-		} 
-		else 
-		{
-			stream.Serialize(ref serialX);
-			stream.Serialize(ref serialZ);
-			if (positionX != serialX || positionZ != serialZ)
-			{
-				Move(serialX, serialZ);
-			}
-		}
-	}
-
-	void OnEnable ()
+    void OnEnable ()
 	{
 		Tile.TileClicked += CheckMoveClick;
 	}
@@ -78,77 +57,35 @@ public class Piece : MonoBehaviour {
 
 	public void SetX(int newX)
 	{
-		positionX = newX;
+        SetPosition(newX, positionZ);
 	}
 
 	public void SetZ(int newZ)
 	{
-		positionZ = newZ;
+        SetPosition(positionX, newZ);
 	}
 
-	public void SetNeverMoved()
-	{
-		everMoved = false;
-	}
-
-	public void PlayerTurnMove(int x, int z)
-	{
-		NetworkManager.CurrentManager.PassMyTurn ();
-		Move (x, z);
-	}
-
-	public void Move (int x, int z)
+    //move is confirmed, send it to the network
+	private void Move (int x, int z)
 	{
 		everMoved = true;
 		unselect ();
 		Move thisMove = new Move (positionX, positionZ, x, z);
 		moveHistory.Add(thisMove);
-		setPosition(x, z);
-		PieceMoved (this, thisMove);
+        NetworkManager.CurrentManager.MoveComplete(thisMove);
 	}
 
-	private void setPosition (int x, int z)
+	public void SetPosition (int x, int z)
 	{
 		positionX = x;
 		positionZ = z;
 		this.transform.position = new Vector3 (Spacing * x, this.transform.position.y, Spacing * z);
 	}
 
-	public void MoveUp()
-	{
-		Move (positionX, positionZ + 1);
-	}
-
-	public void MoveDown()
-	{
-		Move (positionX, positionZ - 1);
-	}
-
-	public void MoveLeft()
-	{
-		Move (positionX - 1, positionZ);
-	}
-
-	public void MoveRight()
-	{
-		Move (positionX + 1, positionZ);
-	}
-
-	// Update is called once per frame
-	void Update () {
-		if (IsMine ())
-		{
-			if (selected & Input.GetKeyUp (KeyCode.LeftArrow))
-				MoveLeft();
-			if (selected & Input.GetKeyUp (KeyCode.RightArrow))
-				MoveRight();
-			if (selected & Input.GetKeyUp (KeyCode.UpArrow))
-				MoveUp();
-			if (selected & Input.GetKeyUp (KeyCode.DownArrow))
-				MoveDown();
-			if (selected && Input.GetMouseButtonDown(0) && mouseOutsideOfMe())
-				unselect();
-		}
+	void Update ()
+    {
+		if (selected && Input.GetMouseButtonDown(0) && mouseOutsideOfMe())
+			unselect();
 	}
 
 	private bool mouseOutsideOfMe()
@@ -165,7 +102,6 @@ public class Piece : MonoBehaviour {
 		}
 
 		return true;
-
 	}
 
 	void OnMouseDown()
@@ -173,12 +109,7 @@ public class Piece : MonoBehaviour {
 		Tile.ClickTile (positionX, positionZ);
 		select ();
 	}
-
-	void OnMouseUp()
-	{
-
-	}
-
+    
 	private void select ()
 	{
 		if (!selected) paintMovementSquares();
@@ -194,10 +125,9 @@ public class Piece : MonoBehaviour {
 	private void paintMovementSquares()
 	{
 		ArrayList availableMoves = myMovementStrategy.AvailableMoves (this);
-		print (availableMoves.Count);
 		for (int i = 0; i < availableMoves.Count; i++)
 		{
-			GameObject newHighlight = Instantiate(Resources.Load("highlight")) as GameObject;
+			GameObject newHighlight = Instantiate(highlightPrefab);
 			Move moveToPaint = (Move)availableMoves[i];
 			newHighlight.transform.position = new Vector3(moveToPaint.ToX * Spacing, 0.2f, moveToPaint.ToZ * Spacing);
 			availableMoveMarkers.Add(newHighlight);
@@ -219,17 +149,29 @@ public class Piece : MonoBehaviour {
 		myMovementStrategy = newMovementStrategy;
 	}
 
-	void CheckMoveClick(int tileX, int tileZ)
+    //when a player tries to make a move by clicking a tile, check its validity
+	private void CheckMoveClick(int tileX, int tileZ)
 	{
+        Debug.Log(selected);
 		Move potentialMove = new Move (positionX, positionZ, tileX, tileZ);
 
-		if (!NetworkManager.CurrentManager.IsMyTurn())
-			Debug.Log("It's not your turn.");
+        if (selected && !NetworkManager.CurrentManager.IsMyTurn())
+        {
+            Debug.Log("It's not your turn.");
+            return;
+        }
 
-		if (selected && 
-		    myMovementStrategy.MoveAvailable(this, potentialMove) && 
-		    NetworkManager.CurrentManager.IsMyTurn())
-				PlayerTurnMove(tileX, tileZ);
+        if (selected && !IsMine())
+        {
+            Debug.Log("That's not your piece.");
+            Debug.Log(GetOwner());
+            Debug.Log(NetworkManager.CurrentManager.MyPlayerNumber());
+            return;
+        }
+
+
+		if (selected && myMovementStrategy.MoveAvailable(this, potentialMove))
+				Move(tileX, tileZ);
 
 	}
 
